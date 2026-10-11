@@ -16,5 +16,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: afk-camera-neoforge-26.2
-          path: build/libs/afk-camera-neoforge-0.2.0.jar
+          path: build/libs/afk-camera-neoforge-0.3.0.jar
           if-no-files-found: error

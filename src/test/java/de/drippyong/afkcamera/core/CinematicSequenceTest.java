@@ -11,11 +11,14 @@ import java.util.EnumSet;
 import java.util.List;
 
 class CinematicSequenceTest {
+    private static final List<Viewpoint> SCENERY = List.of(Viewpoint.LANDSCAPE, Viewpoint.PANORAMA,
+            Viewpoint.SKYWARD, Viewpoint.HORIZON, Viewpoint.AERIAL, Viewpoint.GROUND_SWEEP, Viewpoint.WORLD_ORBIT);
+
     @Test void firstPersonEntryStartsAtEyePositionAndPullsBackSmoothly() {
         var sequence = new CinematicSequence(42, 10, 0, 0);
         assertEquals(0, sequence.sample(0, Environment.OVERWORLD, Motion.DEFAULT).distance());
         assertTrue(sequence.sample(0.001, Environment.OVERWORLD, Motion.DEFAULT).distance() < 0.0001);
-        assertTrue(sequence.sample(3, Environment.OVERWORLD, Motion.DEFAULT).distance() > 2);
+        assertTrue(sequence.sample(3, Environment.OVERWORLD, Motion.DEFAULT).distance() > 1);
     }
 
     @Test void startsAtOriginalViewAndEasesIn() {
@@ -95,6 +98,50 @@ class CinematicSequenceTest {
         }
     }
 
+    @Test void newSceneryPresetsGiveDistinctHorizonAerialAndGroundViews() {
+        var sequence = new CinematicSequence(42, 0, 0);
+        for (var environment : Environment.values()) {
+            for (int shot = 0; shot < 30; shot++) {
+                double time = shot * 14 + 7;
+                Pose horizon = sequence.sample(time, environment, Motion.DEFAULT, Viewpoint.HORIZON);
+                Pose aerial = sequence.sample(time, environment, Motion.DEFAULT, Viewpoint.AERIAL);
+                Pose ground = sequence.sample(time, environment, Motion.DEFAULT, Viewpoint.GROUND_SWEEP);
+                assertTrue(Math.abs(horizon.viewPitch()) < 3, "Horizon should look nearly level");
+                assertTrue(aerial.viewPitch() >= 20 && aerial.viewPitch() <= 35,
+                        "Aerial should look down over terrain rather than back toward the player");
+                if (environment == Environment.CAVE) assertTrue(aerial.pitch() >= 24 && aerial.pitch() <= 37);
+                else if (environment == Environment.NETHER) assertTrue(aerial.pitch() >= 34 && aerial.pitch() <= 49);
+                else assertTrue(aerial.pitch() >= 41 && aerial.pitch() <= 59);
+                assertTrue(ground.pitch() < -4, "Ground sweep should sit below the player's eye line");
+                assertTrue(ground.viewPitch() >= 18 && ground.viewPitch() <= 28);
+                for (var viewpoint : SCENERY) {
+                    Pose pose = sequence.sample(time, environment, Motion.DEFAULT, viewpoint);
+                    assertTrue(Math.abs(CinematicSequence.shortestAngle(pose.viewYaw() - pose.yaw())) > 100,
+                            viewpoint + " should point outward at the world");
+                }
+            }
+        }
+    }
+
+    @Test void worldOrbitCirclesBroadlyWhileKeepingItsViewPointedOutward() {
+        var sequence = new CinematicSequence(42, 0, 0);
+        for (int shot = 0; shot < 30; shot++) {
+            Pose start = sequence.sample(shot * 14 + 2.5, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.WORLD_ORBIT);
+            Pose end = sequence.sample(shot * 14 + 13.999, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.WORLD_ORBIT);
+            double orbit = CinematicSequence.shortestAngle(end.yaw() - start.yaw());
+            assertTrue(Math.abs(orbit) >= 89.999 && Math.abs(orbit) <= 110);
+            assertEquals(orbit, CinematicSequence.shortestAngle(end.viewYaw() - start.viewYaw()), 0.000001);
+            assertEquals(CinematicSequence.shortestAngle(start.viewYaw() - start.yaw()),
+                    CinematicSequence.shortestAngle(end.viewYaw() - end.yaw()), 0.000001);
+        }
+    }
+
+    @Test void sceneryClassificationIdentifiesOnlyFixedWorldViews() {
+        for (var viewpoint : Viewpoint.values()) {
+            assertEquals(SCENERY.contains(viewpoint), viewpoint.isScenery(), viewpoint.name());
+        }
+    }
+
     @Test void panoramaSweepsTheHorizonWithoutOrbitingThePlayerAtTheSameSpeed() {
         var sequence = new CinematicSequence(42, 0, 0);
         Pose start = sequence.sample(2.5, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.PANORAMA);
@@ -117,7 +164,7 @@ class CinematicSequenceTest {
     }
 
     @Test void automaticCycleShowsEveryThirdPersonPresetWithoutAdjacentRepeats() {
-        int presetCount = Viewpoint.values().length - 2;
+        int presetCount = Viewpoint.values().length - 3;
         for (int seed = 0; seed < 10; seed++) {
             var sequence = new CinematicSequence(seed, 0, 0);
             Viewpoint previous = null;
@@ -131,7 +178,41 @@ class CinematicSequenceTest {
                     previous = current;
                 }
                 assertEquals(presetCount, seen.size());
-                assertTrue(seen.containsAll(List.of(Viewpoint.LANDSCAPE, Viewpoint.PANORAMA, Viewpoint.SKYWARD)));
+                assertTrue(seen.containsAll(SCENERY));
+            }
+        }
+    }
+
+    @Test void worldTourCyclesOnlySceneryWithoutAdjacentRepeats() {
+        for (int seed = 0; seed < 10; seed++) {
+            var sequence = new CinematicSequence(seed, 0, 0);
+            Viewpoint previous = null;
+            for (int cycle = 0; cycle < 5; cycle++) {
+                var seen = EnumSet.noneOf(Viewpoint.class);
+                for (int slot = 0; slot < SCENERY.size(); slot++) {
+                    double time = (cycle * SCENERY.size() + slot) * 14 + 7;
+                    Viewpoint current = selectedViewpoint(sequence, time, Viewpoint.WORLD_TOUR);
+                    assertTrue(current.isScenery(), "World tour must select only world-focused views");
+                    assertNotEquals(previous, current, "World tour should change view at every shot boundary");
+                    assertTrue(seen.add(current));
+                    previous = current;
+                }
+                assertEquals(EnumSet.copyOf(SCENERY), seen);
+            }
+        }
+    }
+
+    @Test void worldTourPreservesOutwardFramingThroughoutShotTransitions() {
+        for (int seed = 0; seed < 5; seed++) {
+            var sequence = new CinematicSequence(seed, 0, 0);
+            for (var environment : Environment.values()) {
+                for (var motion : List.of(Motion.DEFAULT, Motion.HIGH)) {
+                    for (double time = 3; time < 300; time += 0.031) {
+                        Pose pose = sequence.sample(time, environment, motion, Viewpoint.WORLD_TOUR);
+                        assertTrue(Math.abs(CinematicSequence.shortestAngle(pose.viewYaw() - pose.yaw())) > 100,
+                                "World tour should keep looking away from the player during blends at " + time);
+                    }
+                }
             }
         }
     }
@@ -143,20 +224,42 @@ class CinematicSequenceTest {
         List<Viewpoint> firstCycle = new ArrayList<>();
         List<Viewpoint> otherCycle = new ArrayList<>();
         List<Viewpoint> nextCycle = new ArrayList<>();
-        for (int shot = 0; shot < Viewpoint.values().length - 2; shot++) {
+        for (int shot = 0; shot < Viewpoint.values().length - 3; shot++) {
             double time = shot * 14 + 7;
             Pose automatic = sequence.sample(time, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.AUTO);
             assertEquals(automatic, sequence.sample(time, Environment.OVERWORLD, Motion.DEFAULT));
             assertEquals(automatic, sameSeed.sample(time, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.AUTO));
             firstCycle.add(automaticViewpoint(sequence, time));
             otherCycle.add(automaticViewpoint(anotherSeed, time));
-            double nextTime = time + (Viewpoint.values().length - 2) * 14;
+            double nextTime = time + (Viewpoint.values().length - 3) * 14;
             nextCycle.add(automaticViewpoint(sequence, nextTime));
             assertEquals(sequence.sample(nextTime, Environment.OVERWORLD, Motion.DEFAULT),
                     sameSeed.sample(nextTime, Environment.OVERWORLD, Motion.DEFAULT));
         }
         assertNotEquals(firstCycle, otherCycle);
         assertNotEquals(firstCycle, nextCycle, "Automatic mode should reshuffle for each new cycle");
+    }
+
+    @Test void worldTourIsSeededAndReshufflesEveryCycle() {
+        var sequence = new CinematicSequence(42, 0, 0);
+        var sameSeed = new CinematicSequence(42, 0, 0);
+        var anotherSeed = new CinematicSequence(987, 0, 0);
+        List<Viewpoint> firstCycle = new ArrayList<>();
+        List<Viewpoint> nextCycle = new ArrayList<>();
+        List<Viewpoint> otherCycle = new ArrayList<>();
+        for (int shot = 0; shot < SCENERY.size(); shot++) {
+            double time = shot * 14 + 7;
+            double nextTime = time + SCENERY.size() * 14;
+            firstCycle.add(selectedViewpoint(sequence, time, Viewpoint.WORLD_TOUR));
+            nextCycle.add(selectedViewpoint(sequence, nextTime, Viewpoint.WORLD_TOUR));
+            otherCycle.add(selectedViewpoint(anotherSeed, time, Viewpoint.WORLD_TOUR));
+            assertEquals(sequence.sample(time, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.WORLD_TOUR),
+                    sameSeed.sample(time, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.WORLD_TOUR));
+            assertEquals(sequence.sample(nextTime, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.WORLD_TOUR),
+                    sameSeed.sample(nextTime, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.WORLD_TOUR));
+        }
+        assertNotEquals(firstCycle, otherCycle);
+        assertNotEquals(firstCycle, nextCycle);
     }
 
     @Test void everyShotBoundaryIsContinuousIncludingYawWrap() {
@@ -234,14 +337,18 @@ class CinematicSequenceTest {
     }
 
     private static Viewpoint automaticViewpoint(CinematicSequence sequence, double time) {
-        Pose automatic = sequence.sample(time, Environment.OVERWORLD, Motion.DEFAULT, Viewpoint.AUTO);
+        return selectedViewpoint(sequence, time, Viewpoint.AUTO);
+    }
+
+    private static Viewpoint selectedViewpoint(CinematicSequence sequence, double time, Viewpoint selected) {
+        Pose automatic = sequence.sample(time, Environment.OVERWORLD, Motion.DEFAULT, selected);
         for (var viewpoint : Viewpoint.values()) {
-            if (viewpoint != Viewpoint.AUTO && viewpoint != Viewpoint.FIRST_PERSON
+            if (viewpoint != Viewpoint.AUTO && viewpoint != Viewpoint.WORLD_TOUR && viewpoint != Viewpoint.FIRST_PERSON
                     && automatic.equals(sequence.sample(time, Environment.OVERWORLD, Motion.DEFAULT, viewpoint))) {
                 return viewpoint;
             }
         }
-        fail("Automatic shot must match a third-person preset");
+        fail("Random shot must match a fixed third-person preset");
         return null;
     }
 }

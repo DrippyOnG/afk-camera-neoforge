@@ -7,7 +7,7 @@ This is an independent implementation; it uses no original mod code or assets.
 ## Install
 
 1. Install NeoForge **26.2.0.88 or newer for Minecraft 26.2** and use **Java 25**.
-2. [Download `afk-camera-neoforge-0.2.0.jar`](https://github.com/DrippyOnG/afk-camera-neoforge/raw/refs/heads/main/downloads/afk-camera-neoforge-0.2.0.jar) and put it in your client's `mods` folder. Replace any older AFK Camera JAR.
+2. [Download `afk-camera-neoforge-0.3.0.jar`](https://github.com/DrippyOnG/afk-camera-neoforge/raw/refs/heads/main/downloads/afk-camera-neoforge-0.3.0.jar) and put it in your client's `mods` folder. Replace any older AFK Camera JAR.
 3. Join a world and remain idle for **25 seconds**, or run `/afkc start`.
 
 Only the client needs the mod. It works on vanilla servers without server installation.
@@ -18,13 +18,15 @@ It does not prevent server AFK kicks, pause the world, or protect the player fro
 - Automatic inactivity detection, plus manual start and stop.
 - Randomly selected viewpoints mix character shots with views of the surrounding landscape and sky.
 - Orbit, front, rear, side, close-up, wide, low-angle, overhead, and first-person viewpoints.
-- Landscape, panorama, and skyward shots look away from the player from a nearby camera position.
+- Seven scenery viewpoints look away from the player from nearby camera positions.
+- **WORLD_TOUR** randomly selects scenery shots and hides your own avatar.
 - Smooth transitions and subtle changes to camera roll and field of view.
 - Shorter camera ranges in caves and the Nether; distinct ranges in the Overworld and End.
 - Minecraft's obstruction ray casts keep the camera out of solid blocks.
 - Dimension-appropriate Minecraft music during cinematics, using your existing volume settings.
 - Optional cinematic black bars and HUD hiding.
-- Keyboard, mouse, player movement, menus, damage, death, and disconnect end cinematics.
+- Optional cinematics behind the pause menu and chat, with separate settings enabled by default.
+- Gameplay input, player movement, other screens, damage, death, and disconnect end cinematics.
 - Restores your previous first-person or third-person view on exit.
 - English and German configuration labels.
 
@@ -36,18 +38,22 @@ The motion presets change how quickly the camera moves through its shots.
 ## Controls and settings
 
 Press **J** to open settings, or use **Mods → AFK Camera → Config**.
-The manual-start, enable/disable, and **Preview next cinematic viewpoint** keys are unbound
-by default; assign them in **Options → Controls**.
+The manual-start, enable/disable, **Preview next cinematic viewpoint**, and
+**Toggle cinematics in menu and chat** keys are unbound by default; assign them in
+**Options → Controls**.
 Configuration is saved locally to `config/afkcamera-client.toml`.
 
-The default **AUTO** viewpoint randomly cycles through the twelve third-person presets,
-including scenery shots, without consecutive repeats. Choose a fixed viewpoint in settings
-or with `/afkc pov <name>`; it keeps its framing with gentle camera motion. First person is
-available explicitly and is excluded from the automatic cycle.
+The default **AUTO** viewpoint randomly cycles through sixteen character and scenery
+presets without consecutive repeats. **WORLD_TOUR** selects only the seven scenery
+presets, keeps the view directed outward during transitions, and hides only your own
+avatar. Choose a fixed viewpoint in settings or with `/afkc pov <name>`; it keeps its
+framing with gentle camera motion. First person is available explicitly and is excluded
+from both random cycles.
 
 | Viewpoint name | Framing |
 | --- | --- |
 | `auto` | Random mix of character, landscape, panorama, and skyward shots |
+| `world_tour` | Random scenery-only cycle with your avatar hidden |
 | `orbit` | Move around the player |
 | `front`, `back`, `left_side`, `right_side` | View the player from the selected side |
 | `close_up`, `wide` | Close framing or a wider view of the player and surroundings |
@@ -56,6 +62,10 @@ available explicitly and is excluded from the automatic cycle.
 | `landscape` | Look outward across the nearby surroundings |
 | `panorama` | Slowly sweep across the surroundings |
 | `skyward` | Look upward toward the sky or ceiling |
+| `horizon` | Look across the horizon |
+| `aerial` | Look down across the surroundings from above |
+| `ground_sweep` | Sweep across the surroundings from near ground level |
+| `world_orbit` | Orbit nearby while looking outward at the surroundings |
 
 | Command | Action |
 | --- | --- |
@@ -69,13 +79,26 @@ available explicitly and is excluded from the automatic cycle.
 | `/afkc pov` | Show the selected viewpoint and available names |
 | `/afkc pov <name>` | Save a viewpoint and preview it when chat closes, if the mod is enabled |
 | `/afkc pov next` | Select and preview the next viewpoint |
+| `/afkc screens` | Toggle cinematics in both the pause menu and chat |
+| `/afkc screens on` / `off` | Enable or disable both screen settings |
+| `/afkc menu` / `chat` | Toggle cinematics in the pause menu or chat separately |
+| `/afkc menu on` / `off`, `/afkc chat on` / `off` | Set either screen setting separately |
 | `/afkc on` / `off` | Enable or disable automatic and manual cinematics |
 | `/afkc settings` | Open the settings screen |
 | `/afkc about` | Show attribution and the original mod link |
 
-Menus suspend the AFK timer. For a world to keep running when Minecraft loses focus,
-use your preferred Minecraft pause-on-lost-focus setting. Disable the game's AFK FPS
-limit if you want smooth cinematics while away. This mod leaves those preferences alone.
+The **In pause menu** and **In chat** settings allow the AFK timer and camera animation
+to continue behind those screens. Both are enabled by default. An active cinematic carries
+into an allowed screen; typing, scrolling, and moving the mouse there do not stop it.
+Black bars are omitted while chat is open so the input field stays visible.
+Closing that screen stops the cinematic and restores gameplay. Other screens, including
+inventory and configuration, stop cinematics. `/afkc start` and viewpoint previews still
+start when chat closes.
+
+Singleplayer remains paused in the pause menu while the camera animates in real time.
+For a world to keep running when Minecraft loses focus, use your preferred Minecraft
+pause-on-lost-focus setting. Disable the game's AFK FPS limit if you want smooth cinematics
+while away. This mod leaves those preferences alone.
 
 ## Development
 
@@ -88,8 +111,9 @@ Install a Java 25 JDK, then run:
 ```
 
 The installable JAR is in `build/libs/`; the `-sources.jar` is for development.
-`./gradlew test` runs tests for AFK state transitions, randomized viewpoint selection,
-camera continuity, motion, and dimension constraints. The first build downloads Minecraft and prepares NeoForge,
+`./gradlew test` runs tests for AFK state transitions, screen eligibility and input policy,
+randomized viewpoint selection, camera continuity, motion, and dimension constraints.
+The first build downloads Minecraft and prepares NeoForge,
 so it takes longer than subsequent builds.
 
 In the Codex cloud machine, `./scripts/setup-cloud.sh` prepares Java and builds the mod.
@@ -104,7 +128,8 @@ still require a desktop test.
 
 Before release, also check in-game: automatic and manual start, mouse/key wake-up,
 restoration of first-person and both third-person views, character and scenery viewpoints,
-viewpoint selection and previews, collision in a small cave,
+viewpoint selection and previews, scenery-only world tours, menu/chat settings and input
+handling, closing allowed screens, collision in a small cave,
 all three dimensions, configuration persistence, and music with resource packs/shaders.
 
 ## Credits and license

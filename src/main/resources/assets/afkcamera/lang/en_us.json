@@ -4,6 +4,7 @@
   "key.afkcamera.start": "Start cinematic camera",
   "key.afkcamera.toggle": "Enable / disable AFK Camera",
   "key.afkcamera.next_viewpoint": "Preview next cinematic viewpoint",
+  "key.afkcamera.toggle_screens": "Toggle cinematics in menu and chat",
   "afkcamera.configuration.title": "AFK Camera settings",
   "afkcamera.configuration.section.afkcamera.client.toml": "Settings",
   "afkcamera.configuration.section.afkcamera.client.toml.title": "AFK Camera settings",
@@ -14,5 +15,9 @@
   "afkcamera.configuration.letterbox": "Cinematic black bars",
   "afkcamera.configuration.motion": "Camera motion",
   "afkcamera.configuration.viewpoint": "Camera viewpoint",
-  "afkcamera.configuration.viewpoint.tooltip": "AUTO randomly mixes character and scenery shots. Other modes keep the selected viewpoint."
+  "afkcamera.configuration.viewpoint.tooltip": "AUTO mixes character and scenery shots. WORLD_TOUR shows only the surroundings. Other modes keep the selected viewpoint.",
+  "afkcamera.configuration.inPauseMenu": "Cinematics in Escape menu",
+  "afkcamera.configuration.inPauseMenu.tooltip": "Allow camera motion while the Escape menu is open. Single-player worlds stay paused. Menu controls remain usable; closing the menu restores your view.",
+  "afkcamera.configuration.inChat": "Cinematics while chat is open",
+  "afkcamera.configuration.inChat.tooltip": "Allow camera motion while you type, read or scroll in chat. Black bars are hidden to keep the input clear. Closing chat restores your view."
 }

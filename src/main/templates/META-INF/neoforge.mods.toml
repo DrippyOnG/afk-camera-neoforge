@@ -6,7 +6,7 @@ version="${version}"
 displayName="AFK Camera (NeoForge)"
 authors="DrippyOnG"
 description='''
-Smooth, player-focused cinematic cameras while you are AFK.
+Smooth character and scenery cameras while you are AFK, including in the pause menu and chat.
 An independent recreation inspired by AFK Cinematics by Spunky Insaan.
 '''
 

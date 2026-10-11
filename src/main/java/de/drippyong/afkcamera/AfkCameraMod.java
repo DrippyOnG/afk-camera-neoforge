@@ -2,10 +2,14 @@ package de.drippyong.afkcamera;
 
 import de.drippyong.afkcamera.core.CinematicSequence;
 import de.drippyong.afkcamera.core.IdleTracker;
+import de.drippyong.afkcamera.core.ScreenPolicy;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.Music;
@@ -25,6 +29,7 @@ import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.RenderHandEvent;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.client.event.SelectMusicEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
@@ -48,6 +53,7 @@ public final class AfkCameraMod {
     private static final KeyMapping START = new KeyMapping("key.afkcamera.start", GLFW.GLFW_KEY_UNKNOWN, CATEGORY);
     private static final KeyMapping TOGGLE = new KeyMapping("key.afkcamera.toggle", GLFW.GLFW_KEY_UNKNOWN, CATEGORY);
     private static final KeyMapping NEXT_VIEWPOINT = new KeyMapping("key.afkcamera.next_viewpoint", GLFW.GLFW_KEY_UNKNOWN, CATEGORY);
+    private static final KeyMapping TOGGLE_SCREENS = new KeyMapping("key.afkcamera.toggle_screens", GLFW.GLFW_KEY_UNKNOWN, CATEGORY);
 
     private final IdleTracker idle = new IdleTracker();
     private final ModContainer container;
@@ -62,7 +68,7 @@ public final class AfkCameraMod {
     private Vec3 previousPosition;
     private float previousYaw;
     private float previousPitch;
-    private int cinematicTicks;
+    private long cinematicStartedAtNanos;
     private boolean activity;
     private boolean manualStart;
 
@@ -82,9 +88,15 @@ public final class AfkCameraMod {
         bus.addListener(this::playerBody);
         bus.addListener(this::music);
         bus.addListener(this::commands);
-        bus.addListener((InputEvent.Key event) -> { if (event.getAction() != GLFW.GLFW_RELEASE) wake(); });
-        bus.addListener((InputEvent.MouseButton.Pre event) -> { if (event.getAction() != GLFW.GLFW_RELEASE) wake(); });
-        bus.addListener((InputEvent.MouseScrollingEvent event) -> wake());
+        bus.addListener(this::key);
+        bus.addListener(this::screenOpened);
+        bus.addListener(this::screenClosed);
+        bus.addListener((InputEvent.MouseButton.Pre event) -> {
+            if (event.getAction() != GLFW.GLFW_RELEASE && !ignoreScreenInput(Minecraft.getInstance())) wake();
+        });
+        bus.addListener((InputEvent.MouseScrollingEvent event) -> {
+            if (!ignoreScreenInput(Minecraft.getInstance())) wake();
+        });
     }
 
     private void registerKeys(RegisterKeyMappingsEvent event) {
@@ -93,6 +105,7 @@ public final class AfkCameraMod {
         event.register(START);
         event.register(TOGGLE);
         event.register(NEXT_VIEWPOINT);
+        event.register(TOGGLE_SCREENS);
     }
 
     private void wake() {
@@ -103,7 +116,46 @@ public final class AfkCameraMod {
     private boolean eligible(Minecraft mc) {
         return mc.player != null && mc.level != null && mc.getCameraEntity() == mc.player && mc.player.isAlive()
                 && !mc.player.isSleeping() && mc.player.hurtTime == 0
-                && !mc.isPaused() && mc.gui.screen() == null;
+                && ScreenPolicy.allowsCinematics(screenContext(mc.gui.screen()), mc.isPaused(),
+                CameraConfig.IN_PAUSE_MENU.get(), CameraConfig.IN_CHAT.get());
+    }
+
+    private ScreenPolicy.Context screenContext(Screen screen) {
+        if (screen == null) return ScreenPolicy.Context.GAMEPLAY;
+        if (screen instanceof PauseScreen) return ScreenPolicy.Context.PAUSE_MENU;
+        if (screen instanceof ChatScreen) return ScreenPolicy.Context.CHAT;
+        return ScreenPolicy.Context.OTHER;
+    }
+
+    private boolean ignoreScreenInput(Minecraft mc) {
+        return ScreenPolicy.ignoresInput(screenContext(mc.gui.screen()),
+                CameraConfig.IN_PAUSE_MENU.get(), CameraConfig.IN_CHAT.get());
+    }
+
+    private void key(InputEvent.Key event) {
+        if (event.getAction() == GLFW.GLFW_RELEASE) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (ignoreScreenInput(mc)) return;
+        // Chat opens on the next tick, after this key event has been dispatched.
+        if (mc.gui.screen() == null && CameraConfig.IN_CHAT.get()
+                && (mc.options.keyChat.matches(event.getKeyEvent())
+                || mc.options.keyCommand.matches(event.getKeyEvent()))) return;
+        wake();
+    }
+
+    private void screenOpened(ScreenEvent.Opening event) {
+        var next = screenContext(event.getNewScreen());
+        if (next == ScreenPolicy.Context.OTHER
+                || (next == ScreenPolicy.Context.PAUSE_MENU && !CameraConfig.IN_PAUSE_MENU.get())
+                || (next == ScreenPolicy.Context.CHAT && !CameraConfig.IN_CHAT.get())) {
+            stop();
+        }
+    }
+
+    private void screenClosed(ScreenEvent.Closing event) {
+        // Vanilla does not emit Opening when returning to gameplay with a null screen.
+        if (ScreenPolicy.ignoresInput(screenContext(event.getScreen()),
+                CameraConfig.IN_PAUSE_MENU.get(), CameraConfig.IN_CHAT.get())) stop();
     }
 
     private void tick(ClientTickEvent.Post event) {
@@ -115,6 +167,8 @@ public final class AfkCameraMod {
         while (TOGGLE.consumeClick()) setEnabled(!CameraConfig.ENABLED.get());
         while (START.consumeClick()) manualStart = true;
         while (NEXT_VIEWPOINT.consumeClick()) selectViewpoint(nextViewpoint());
+        while (TOGGLE_SCREENS.consumeClick()) setScreensEnabled(
+                !(CameraConfig.IN_PAUSE_MENU.get() && CameraConfig.IN_CHAT.get()));
 
         if (previousPlayer != mc.player || previousLevel != mc.level) {
             stop();
@@ -133,10 +187,10 @@ public final class AfkCameraMod {
             previousYaw = mc.player.getYRot();
             previousPitch = mc.player.getXRot();
         }
-        boolean heldInput = mc.options.keyUp.isDown() || mc.options.keyDown.isDown()
+        boolean heldInput = !ignoreScreenInput(mc) && (mc.options.keyUp.isDown() || mc.options.keyDown.isDown()
                 || mc.options.keyLeft.isDown() || mc.options.keyRight.isDown()
                 || mc.options.keyJump.isDown() || mc.options.keyShift.isDown()
-                || mc.options.keySprint.isDown() || mc.options.keyAttack.isDown() || mc.options.keyUse.isDown();
+                || mc.options.keySprint.isDown() || mc.options.keyAttack.isDown() || mc.options.keyUse.isDown());
         boolean eligible = eligible(mc) && CameraConfig.ENABLED.get();
         boolean startNow = eligible && manualStart;
         if (startNow || mc.player == null || !CameraConfig.ENABLED.get()) manualStart = false;
@@ -159,28 +213,32 @@ public final class AfkCameraMod {
                     : mc.level.dimension().equals(Level.END) ? CinematicSequence.Environment.END
                     : !mc.level.canSeeSky(mc.player.blockPosition().above()) ? CinematicSequence.Environment.CAVE
                     : CinematicSequence.Environment.OVERWORLD;
-            cinematicTicks = 0;
+            cinematicStartedAtNanos = System.nanoTime();
             pose = sequence.sample(0, environment, CameraConfig.MOTION.get(), activeViewpoint);
         }
-        if (idle.isActive()) cinematicTicks++;
     }
 
     private void frame(RenderFrameEvent.Pre event) {
         if (!idle.isActive()) return;
         Minecraft mc = Minecraft.getInstance();
-        // Mouse motion can arrive between client ticks. Exit before rendering the next frame.
-        if (!eligible(mc) || !CameraConfig.ENABLED.get()
-                || mc.options.getCameraType() != activeCamera
-                || mc.mouseHandler.getXVelocity() != 0 || mc.mouseHandler.getYVelocity() != 0
+        if (shouldWake(mc)) wake();
+    }
+
+    private boolean shouldWake(Minecraft mc) {
+        if (!eligible(mc) || !CameraConfig.ENABLED.get() || mc.options.getCameraType() != activeCamera) return true;
+        return !ignoreScreenInput(mc) && (mc.mouseHandler.getXVelocity() != 0 || mc.mouseHandler.getYVelocity() != 0
                 || Math.abs(CinematicSequence.shortestAngle(mc.player.getYRot() - previousYaw)) > 0.001
-                || Math.abs(mc.player.getXRot() - previousPitch) > 0.001) {
-            wake();
-        }
+                || Math.abs(mc.player.getXRot() - previousPitch) > 0.001);
     }
 
     private void angles(ViewportEvent.ComputeCameraAngles event) {
         if (!idle.isActive() || sequence == null || event.getCamera().entity() != Minecraft.getInstance().player) return;
-        pose = sequence.sample((Math.max(0, cinematicTicks - 1) + event.getPartialTick()) / 20.0,
+        if (shouldWake(Minecraft.getInstance())) {
+            wake();
+            return;
+        }
+        // Game partial ticks freeze while paused. Monotonic time keeps only the camera moving.
+        pose = sequence.sample(Math.max(0, System.nanoTime() - cinematicStartedAtNanos) / 1_000_000_000.0,
                 environment, CameraConfig.MOTION.get(), activeViewpoint);
         event.setYaw((float) pose.yaw());
         event.setPitch((float) pose.pitch());
@@ -209,6 +267,10 @@ public final class AfkCameraMod {
     private void playerBody(RenderPlayerEvent.Pre<?> event) {
         Minecraft mc = Minecraft.getInstance();
         if (!idle.isActive() || mc.player == null || event.getRenderState().id != mc.player.getId()) return;
+        if (activeViewpoint == CinematicSequence.Viewpoint.WORLD_TOUR || activeViewpoint.isScenery()) {
+            event.setCanceled(true);
+            return;
+        }
         var state = event.getRenderState();
         // Collision or a smooth first-person entry can put the lens inside the head.
         if (mc.gameRenderer.mainCamera().position().distanceToSqr(
@@ -220,8 +282,9 @@ public final class AfkCameraMod {
     private void hud(RenderGuiEvent.Pre event) {
         if (!idle.isActive()) return;
         if (CameraConfig.HIDE_HUD.get()) event.setCanceled(true);
-        if (CameraConfig.LETTERBOX.get()) {
-            var mc = Minecraft.getInstance();
+        var mc = Minecraft.getInstance();
+        // The input field is at the bottom of the screen; keep chat unobstructed.
+        if (CameraConfig.LETTERBOX.get() && !(mc.gui.screen() instanceof ChatScreen)) {
             int width = mc.getWindow().getGuiScaledWidth();
             int height = mc.getWindow().getGuiScaledHeight();
             int bar = Math.max(1, height / 10);
@@ -252,7 +315,7 @@ public final class AfkCameraMod {
         activeViewpoint = null;
         sequence = null;
         pose = null;
-        cinematicTicks = 0;
+        cinematicStartedAtNanos = 0;
     }
 
     private void setEnabled(boolean enabled) {
@@ -263,6 +326,21 @@ public final class AfkCameraMod {
             manualStart = false;
             stop();
         }
+    }
+
+    private int setScreensEnabled(boolean enabled) {
+        CameraConfig.IN_PAUSE_MENU.set(enabled);
+        CameraConfig.IN_CHAT.set(enabled);
+        CameraConfig.SPEC.save();
+        if (!eligible(Minecraft.getInstance())) stop();
+        return feedback("Cinematics in Escape menu and chat: " + (enabled ? "on" : "off") + ".");
+    }
+
+    private int setScreenEnabled(boolean chat, boolean enabled) {
+        (chat ? CameraConfig.IN_CHAT : CameraConfig.IN_PAUSE_MENU).set(enabled);
+        CameraConfig.SPEC.save();
+        if (!eligible(Minecraft.getInstance())) stop();
+        return feedback("Cinematics in " + (chat ? "chat" : "Escape menu") + ": " + (enabled ? "on" : "off") + ".");
     }
 
     private int feedback(String text) {
@@ -281,16 +359,16 @@ public final class AfkCameraMod {
         CameraConfig.SPEC.save();
         manualStart = CameraConfig.ENABLED.get();
         return feedback("Camera viewpoint: " + viewpoint.name().toLowerCase(Locale.ROOT)
-                + (manualStart ? ". Preview starts when chat closes; input exits." : ". Use /afkc on to enable previews."));
+                + (manualStart ? ". Preview requested; gameplay input exits." : ". Use /afkc on to enable previews."));
     }
 
     private void commands(RegisterClientCommandsEvent event) {
         var root = literal("afkc")
-                .executes(context -> feedback("AFK Camera: /afkc start, stop, pov <mode>|next, time <seconds>, music on|off, motion <level>, on, off, settings, about"))
+                .executes(context -> feedback("AFK Camera: /afkc start, stop, pov <mode>|next, screens on|off, menu on|off, chat on|off, time <seconds>, music on|off, motion <level>, on, off, settings, about"))
                 .then(literal("start").executes(context -> {
                     if (!CameraConfig.ENABLED.get()) return feedback("AFK Camera is disabled. Use /afkc on first.");
                     manualStart = true;
-                    return feedback("Cinematic camera will start when chat closes. Move or press a key to exit.");
+                    return feedback("Cinematic camera requested. Gameplay input exits; allowed menus and chat keep it running.");
                 }))
                 .then(literal("stop").executes(context -> {
                     manualStart = false;
@@ -335,11 +413,21 @@ public final class AfkCameraMod {
         }
         var viewpoint = literal("pov").executes(context -> feedback("Camera viewpoint: "
                 + CameraConfig.VIEWPOINT.get().name().toLowerCase(Locale.ROOT)
-                + ". Use /afkc pov auto for random character/scenery shots, or press Tab after /afkc pov to choose a mode."));
+                + ". Use /afkc pov world_tour for scenery only, auto for a mixed tour, or press Tab to list modes."));
         viewpoint.then(literal("next").executes(context -> selectViewpoint(nextViewpoint())));
         for (var mode : CinematicSequence.Viewpoint.values()) {
             viewpoint.then(literal(mode.name().toLowerCase(Locale.ROOT)).executes(context -> selectViewpoint(mode)));
         }
-        event.getDispatcher().register(root.then(music).then(motion).then(viewpoint));
+        var screens = literal("screens").executes(context -> setScreensEnabled(
+                !(CameraConfig.IN_PAUSE_MENU.get() && CameraConfig.IN_CHAT.get())));
+        var menu = literal("menu").executes(context -> setScreenEnabled(false, !CameraConfig.IN_PAUSE_MENU.get()));
+        var chat = literal("chat").executes(context -> setScreenEnabled(true, !CameraConfig.IN_CHAT.get()));
+        for (boolean enabled : new boolean[] {true, false}) {
+            String name = enabled ? "on" : "off";
+            screens.then(literal(name).executes(context -> setScreensEnabled(enabled)));
+            menu.then(literal(name).executes(context -> setScreenEnabled(false, enabled)));
+            chat.then(literal(name).executes(context -> setScreenEnabled(true, enabled)));
+        }
+        event.getDispatcher().register(root.then(music).then(motion).then(viewpoint).then(screens).then(menu).then(chat));
     }
 }

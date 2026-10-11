@@ -6,8 +6,15 @@ import java.util.Random;
 public final class CinematicSequence {
     public enum Environment { OVERWORLD, CAVE, NETHER, END }
     public enum Viewpoint {
-        AUTO, ORBIT, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, CLOSE_UP, WIDE, LOW_ANGLE, OVERHEAD,
-        LANDSCAPE, PANORAMA, SKYWARD, FIRST_PERSON
+        AUTO, WORLD_TOUR, ORBIT, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, CLOSE_UP, WIDE, LOW_ANGLE, OVERHEAD,
+        LANDSCAPE, PANORAMA, SKYWARD, HORIZON, AERIAL, GROUND_SWEEP, WORLD_ORBIT, FIRST_PERSON;
+
+        public boolean isScenery() {
+            return switch (this) {
+                case LANDSCAPE, PANORAMA, SKYWARD, HORIZON, AERIAL, GROUND_SWEEP, WORLD_ORBIT -> true;
+                default -> false;
+            };
+        }
     }
     public enum Motion {
         LOW(0.55), DEFAULT(1.0), MEDIUM(1.3), HIGH(1.65);
@@ -33,15 +40,23 @@ public final class CinematicSequence {
 
     private static final double SHOT_SECONDS = 14.0;
     private static final double BLEND_SECONDS = 2.5;
+    private static final long AUTO_SHUFFLE_SALT = 0xD1B54A32D192ED03L;
+    private static final long WORLD_SHUFFLE_SALT = 0xA0761D6478BD642FL;
     private static final Viewpoint[] AUTO_VIEWPOINTS = {
             Viewpoint.ORBIT, Viewpoint.FRONT, Viewpoint.BACK, Viewpoint.LEFT_SIDE, Viewpoint.RIGHT_SIDE,
             Viewpoint.CLOSE_UP, Viewpoint.WIDE, Viewpoint.LOW_ANGLE, Viewpoint.OVERHEAD,
-            Viewpoint.LANDSCAPE, Viewpoint.PANORAMA, Viewpoint.SKYWARD
+            Viewpoint.LANDSCAPE, Viewpoint.PANORAMA, Viewpoint.SKYWARD,
+            Viewpoint.HORIZON, Viewpoint.AERIAL, Viewpoint.GROUND_SWEEP, Viewpoint.WORLD_ORBIT
+    };
+    private static final Viewpoint[] WORLD_VIEWPOINTS = {
+            Viewpoint.LANDSCAPE, Viewpoint.PANORAMA, Viewpoint.SKYWARD,
+            Viewpoint.HORIZON, Viewpoint.AERIAL, Viewpoint.GROUND_SWEEP, Viewpoint.WORLD_ORBIT
     };
     private final long seed;
     private final Pose initial;
     private final double playerYaw;
     private final Viewpoint[] autoViewpoints;
+    private final Viewpoint[] worldViewpoints;
 
     public CinematicSequence(long seed, double yaw, double pitch) {
         this(seed, yaw, pitch, 4);
@@ -58,7 +73,8 @@ public final class CinematicSequence {
         this.playerYaw = playerYaw;
         initial = new Pose(cameraYaw, Math.clamp(cameraPitch, -80, 80),
                 Math.clamp(initialDistance, 0, 10), 1, 0);
-        autoViewpoints = shuffledViewpoints(0);
+        autoViewpoints = shuffledViewpoints(0, AUTO_VIEWPOINTS, AUTO_SHUFFLE_SALT);
+        worldViewpoints = shuffledViewpoints(0, WORLD_VIEWPOINTS, WORLD_SHUFFLE_SALT);
     }
 
     public Pose sample(double elapsedSeconds, Environment environment, Motion motion) {
@@ -78,17 +94,28 @@ public final class CinematicSequence {
                 ? new Pose(playerYaw, initial.pitch, 0, 1, 0) : initial;
         Pose previous = index == 0 ? entry : shot(index - 1, environment, viewpoint).sample(1);
         double blend = smooth(local / BLEND_SECONDS);
-        return new Pose(previous.yaw + shortestAngle(target.yaw - previous.yaw) * blend,
+        double yaw = previous.yaw + shortestAngle(target.yaw - previous.yaw) * blend;
+        double viewYaw = previous.viewYaw + shortestAngle(target.viewYaw - previous.viewYaw) * blend;
+        double previousOffset = shortestAngle(previous.viewYaw - previous.yaw);
+        double targetOffset = shortestAngle(target.viewYaw - target.yaw);
+        if (index > 0 && Math.abs(previousOffset) > 100 && Math.abs(targetOffset) > 100) {
+            // Follow the outward framing through scenery blends instead of swivelling past the player.
+            viewYaw = yaw + previousOffset + shortestAngle(targetOffset - previousOffset) * blend;
+        }
+        return new Pose(yaw,
                 lerp(previous.pitch, target.pitch, blend), lerp(previous.distance, target.distance, blend),
                 lerp(previous.fovScale, target.fovScale, blend), lerp(previous.roll, target.roll, blend),
-                previous.viewYaw + shortestAngle(target.viewYaw - previous.viewYaw) * blend,
+                viewYaw,
                 lerp(previous.viewPitch, target.viewPitch, blend));
     }
 
     private Shot shot(long index, Environment environment, Viewpoint selected) {
         Random random = new Random(seed ^ (index * 0x9E3779B97F4A7C15L));
-        Viewpoint viewpoint = selected == Viewpoint.AUTO
-                ? automaticViewpoint(index) : selected;
+        Viewpoint viewpoint = switch (selected) {
+            case AUTO -> cycleViewpoint(index, AUTO_VIEWPOINTS, autoViewpoints, AUTO_SHUFFLE_SALT);
+            case WORLD_TOUR -> cycleViewpoint(index, WORLD_VIEWPOINTS, worldViewpoints, WORLD_SHUFFLE_SALT);
+            default -> selected;
+        };
         double maxRadius = switch (environment) {
             case CAVE -> 3.5;
             case NETHER -> 5.5;
@@ -168,7 +195,7 @@ public final class CinematicSequence {
                 dolly = direction * 0.15;
                 roll = cave ? 0 : 0.4;
             }
-            case LANDSCAPE, PANORAMA, SKYWARD -> {
+            case LANDSCAPE, PANORAMA, SKYWARD, HORIZON, AERIAL, GROUND_SWEEP, WORLD_ORBIT -> {
                 scenery = true;
                 yaw += between(random, -180, 180);
                 arc = direction * (viewpoint == Viewpoint.PANORAMA ? 10 : 8);
@@ -198,6 +225,37 @@ public final class CinematicSequence {
                         viewLift = between(random, -2, 2);
                         fov = 0.95;
                     }
+                    case HORIZON -> {
+                        viewPitch = between(random, -1.5, 1.5);
+                        viewLift = between(random, -0.75, 0.75);
+                        fov = 1;
+                        roll = cave ? 0 : 0.1;
+                    }
+                    case AERIAL -> {
+                        pitch = switch (environment) {
+                            case CAVE -> between(random, 25, 36);
+                            case NETHER -> between(random, 35, 48);
+                            default -> between(random, 42, 58);
+                        };
+                        distance = maxRadius * between(random, 0.62, 0.82);
+                        viewPitch = between(random, 23, 32);
+                        fov = 0.9;
+                    }
+                    case GROUND_SWEEP -> {
+                        pitch = between(random, -8, -5);
+                        arc = direction * 24;
+                        viewArc = direction * 35;
+                        viewPitch = between(random, 19, 27);
+                        fov = 0.98;
+                    }
+                    case WORLD_ORBIT -> {
+                        arc = direction * between(random, 90, 110);
+                        viewArc = arc;
+                        viewYaw = yaw + between(random, 150, 180);
+                        distance = maxRadius * between(random, 0.58, 0.76);
+                        viewPitch = between(random, 1, 9);
+                        fov = 0.96;
+                    }
                     default -> throw new IllegalStateException("Unexpected scenery viewpoint");
                 }
             }
@@ -211,7 +269,7 @@ public final class CinematicSequence {
                 fov = 1;
                 roll = 0;
             }
-            case AUTO -> throw new IllegalStateException("Automatic viewpoint must be resolved first");
+            case AUTO, WORLD_TOUR -> throw new IllegalStateException("Random viewpoint must be resolved first");
         }
         // Bound both endpoints; easing is monotonic, so every intermediate dolly stays bounded too.
         if (viewpoint != Viewpoint.FIRST_PERSON) {
@@ -227,11 +285,11 @@ public final class CinematicSequence {
         return min + random.nextDouble() * (max - min);
     }
 
-    private Viewpoint automaticViewpoint(long index) {
-        long cycle = index / autoViewpoints.length;
-        if (cycle == 0) return autoViewpoints[(int) index];
-        Viewpoint[] current = shuffledViewpoints(cycle);
-        Viewpoint[] previous = cycle == 1 ? autoViewpoints : shuffledViewpoints(cycle - 1);
+    private Viewpoint cycleViewpoint(long index, Viewpoint[] pool, Viewpoint[] firstCycle, long salt) {
+        long cycle = index / pool.length;
+        if (cycle == 0) return firstCycle[(int) index];
+        Viewpoint[] current = shuffledViewpoints(cycle, pool, salt);
+        Viewpoint[] previous = cycle == 1 ? firstCycle : shuffledViewpoints(cycle - 1, pool, salt);
         // Swapping only the first two leaves the last shot unchanged, so this also works out of order.
         if (current[0] == previous[previous.length - 1]) {
             Viewpoint swap = current[0];
@@ -241,9 +299,9 @@ public final class CinematicSequence {
         return current[(int) (index % current.length)];
     }
 
-    private Viewpoint[] shuffledViewpoints(long cycle) {
-        Viewpoint[] viewpoints = AUTO_VIEWPOINTS.clone();
-        Random random = new Random(seed ^ 0xD1B54A32D192ED03L ^ (cycle * 0x94D049BB133111EBL));
+    private Viewpoint[] shuffledViewpoints(long cycle, Viewpoint[] pool, long salt) {
+        Viewpoint[] viewpoints = pool.clone();
+        Random random = new Random(seed ^ salt ^ (cycle * 0x94D049BB133111EBL));
         for (int i = viewpoints.length - 1; i > 0; i--) {
             int other = random.nextInt(i + 1);
             Viewpoint swap = viewpoints[i];

@@ -21,8 +21,14 @@ public final class CameraConfig {
     public static final ModConfigSpec.EnumValue<CinematicSequence.Motion> MOTION = BUILDER
             .translation("afkcamera.configuration.motion").defineEnum("motion", CinematicSequence.Motion.DEFAULT);
     public static final ModConfigSpec.EnumValue<CinematicSequence.Viewpoint> VIEWPOINT = BUILDER
-            .comment("AUTO randomly mixes character shots and scenery views. Other modes keep a chosen viewpoint.")
+            .comment("AUTO mixes character and scenery shots; WORLD_TOUR randomly shows only the surroundings.")
             .translation("afkcamera.configuration.viewpoint").defineEnum("viewpoint", CinematicSequence.Viewpoint.AUTO);
+    public static final ModConfigSpec.BooleanValue IN_PAUSE_MENU = BUILDER
+            .comment("Allow cinematics behind the Escape menu. Single-player worlds stay paused.")
+            .translation("afkcamera.configuration.inPauseMenu").define("inPauseMenu", true);
+    public static final ModConfigSpec.BooleanValue IN_CHAT = BUILDER
+            .comment("Allow cinematics while chat is open; typing and scrolling do not interrupt them.")
+            .translation("afkcamera.configuration.inChat").define("inChat", true);
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private CameraConfig() {}

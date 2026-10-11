@@ -4,6 +4,7 @@
   "key.afkcamera.start": "Filmische Kamera starten",
   "key.afkcamera.toggle": "AFK-Kamera aktivieren / deaktivieren",
   "key.afkcamera.next_viewpoint": "Nächste Kameraperspektive ausprobieren",
+  "key.afkcamera.toggle_screens": "Kamerafahrten in Menü und Chat umschalten",
   "afkcamera.configuration.title": "AFK-Kamera-Einstellungen",
   "afkcamera.configuration.section.afkcamera.client.toml": "Einstellungen",
   "afkcamera.configuration.section.afkcamera.client.toml.title": "AFK-Kamera-Einstellungen",
@@ -14,5 +15,9 @@
   "afkcamera.configuration.letterbox": "Filmische schwarze Balken",
   "afkcamera.configuration.motion": "Kamerabewegung",
   "afkcamera.configuration.viewpoint": "Kameraperspektive",
-  "afkcamera.configuration.viewpoint.tooltip": "AUTO mischt zufällig Figuren- und Landschaftsaufnahmen. Andere Modi behalten die gewählte Perspektive bei."
+  "afkcamera.configuration.viewpoint.tooltip": "AUTO mischt Figuren- und Landschaftsaufnahmen. WORLD_TOUR zeigt nur die Umgebung. Andere Modi behalten die gewählte Perspektive bei.",
+  "afkcamera.configuration.inPauseMenu": "Kamerafahrten im Escape-Menü",
+  "afkcamera.configuration.inPauseMenu.tooltip": "Kamera bewegen, während das Escape-Menü geöffnet ist. Einzelspielerwelten bleiben pausiert. Beim Schließen wird deine Perspektive wiederhergestellt.",
+  "afkcamera.configuration.inChat": "Kamerafahrten im Chat",
+  "afkcamera.configuration.inChat.tooltip": "Kamera bewegen, während du im Chat schreibst, liest oder scrollst. Schwarze Balken werden für eine freie Eingabe ausgeblendet. Beim Schließen wird deine Perspektive wiederhergestellt."
 }
