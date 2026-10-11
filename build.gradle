@@ -1,0 +1,44 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+group = 'de.drippyong.afkcamera'
+version = mod_version
+base { archivesName = 'afk-camera-neoforge' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+java.withSourcesJar()
+
+repositories { mavenCentral() }
+
+neoForge {
+    version = neo_version
+    runs {
+        client {
+            client()
+            gameDirectory = file('run/client')
+        }
+    }
+    mods {
+        afkcamera { sourceSet sourceSets.main }
+    }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test', Test) { useJUnitPlatform() }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.withType(Jar).configureEach { from('LICENSE') { into 'META-INF' } }
+
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    inputs.properties(version: project.version, neo_version: neo_version, minecraft_version: minecraft_version)
+    expand(version: project.version, neo_version: neo_version, minecraft_version: minecraft_version)
+    from 'src/main/templates'
+    into 'build/generated/modMetadata'
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata

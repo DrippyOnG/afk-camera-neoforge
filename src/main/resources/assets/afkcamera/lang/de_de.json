@@ -1,0 +1,18 @@
+{
+  "key.category.afkcamera.controls": "AFK-Kamera",
+  "key.afkcamera.settings": "AFK-Kamera-Einstellungen",
+  "key.afkcamera.start": "Filmische Kamera starten",
+  "key.afkcamera.toggle": "AFK-Kamera aktivieren / deaktivieren",
+  "key.afkcamera.next_viewpoint": "Nächste Kameraperspektive ausprobieren",
+  "afkcamera.configuration.title": "AFK-Kamera-Einstellungen",
+  "afkcamera.configuration.section.afkcamera.client.toml": "Einstellungen",
+  "afkcamera.configuration.section.afkcamera.client.toml.title": "AFK-Kamera-Einstellungen",
+  "afkcamera.configuration.enabled": "Automatische Kamerafahrten",
+  "afkcamera.configuration.idleSeconds": "AFK-Verzögerung (Sekunden)",
+  "afkcamera.configuration.music": "Filmische Minecraft-Musik",
+  "afkcamera.configuration.hideHud": "HUD während Kamerafahrten ausblenden",
+  "afkcamera.configuration.letterbox": "Filmische schwarze Balken",
+  "afkcamera.configuration.motion": "Kamerabewegung",
+  "afkcamera.configuration.viewpoint": "Kameraperspektive",
+  "afkcamera.configuration.viewpoint.tooltip": "AUTO mischt zufällig Figuren- und Landschaftsaufnahmen. Andere Modi behalten die gewählte Perspektive bei."
+}

@@ -1,0 +1,25 @@
+license="MIT"
+
+[[mods]]
+modId="afkcamera"
+version="${version}"
+displayName="AFK Camera (NeoForge)"
+authors="DrippyOnG"
+description='''
+Smooth, player-focused cinematic cameras while you are AFK.
+An independent recreation inspired by AFK Cinematics by Spunky Insaan.
+'''
+
+[[dependencies.afkcamera]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version},)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.afkcamera]]
+modId="minecraft"
+type="required"
+versionRange="[${minecraft_version}]"
+ordering="NONE"
+side="CLIENT"

@@ -1,0 +1,18 @@
+{
+  "key.category.afkcamera.controls": "AFK Camera",
+  "key.afkcamera.settings": "AFK Camera settings",
+  "key.afkcamera.start": "Start cinematic camera",
+  "key.afkcamera.toggle": "Enable / disable AFK Camera",
+  "key.afkcamera.next_viewpoint": "Preview next cinematic viewpoint",
+  "afkcamera.configuration.title": "AFK Camera settings",
+  "afkcamera.configuration.section.afkcamera.client.toml": "Settings",
+  "afkcamera.configuration.section.afkcamera.client.toml.title": "AFK Camera settings",
+  "afkcamera.configuration.enabled": "Automatic cinematics",
+  "afkcamera.configuration.idleSeconds": "AFK delay (seconds)",
+  "afkcamera.configuration.music": "Cinematic Minecraft music",
+  "afkcamera.configuration.hideHud": "Hide HUD during cinematics",
+  "afkcamera.configuration.letterbox": "Cinematic black bars",
+  "afkcamera.configuration.motion": "Camera motion",
+  "afkcamera.configuration.viewpoint": "Camera viewpoint",
+  "afkcamera.configuration.viewpoint.tooltip": "AUTO randomly mixes character and scenery shots. Other modes keep the selected viewpoint."
+}
