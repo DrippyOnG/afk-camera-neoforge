@@ -7,7 +7,7 @@ This is an independent implementation; it uses no original mod code or assets.
 ## Install
 
 1. Install NeoForge **26.2.0.88 or newer for Minecraft 26.2** and use **Java 25**.
-2. Put `afk-camera-neoforge-0.2.0.jar` in your client's `mods` folder. Replace any older AFK Camera JAR.
+2. [Download `afk-camera-neoforge-0.2.0.jar`](https://github.com/DrippyOnG/afk-camera-neoforge/raw/refs/heads/main/downloads/afk-camera-neoforge-0.2.0.jar) and put it in your client's `mods` folder. Replace any older AFK Camera JAR.
 3. Join a world and remain idle for **25 seconds**, or run `/afkc start`.
 
 Only the client needs the mod. It works on vanilla servers without server installation.
